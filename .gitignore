@@ -1,0 +1,109 @@
+# ========================================
+# Environment & Secrets
+# ========================================
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# ========================================
+# Python
+# ========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+env/
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+*.whl
+pip-log.txt
+
+# ========================================
+# ML Models (large files)
+# ========================================
+models/faster-whisper-*/
+models/models--*/
+models/.locks/
+models/*.pt
+models/*.bin
+models/*.safetensors
+models/*.onnx
+models/*.gguf
+!models/.gitkeep
+
+# ========================================
+# Docker & Containers
+# ========================================
+*.log
+docker-compose.override.yml
+
+# ========================================
+# IDE
+# ========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ========================================
+# Testing & Coverage
+# ========================================
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# ========================================
+# OS
+# ========================================
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ========================================
+# Temp & Cache
+# ========================================
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.cache
+.mypy_cache/
+.ruff_cache/
+
+# ========================================
+# Audio temp files
+# ========================================
+*.audio
+preprocessed_*.wav
+
+# ========================================
+# UV / Package manager
+# ========================================
+uv.lock
+
+# Claude Code
+.claude/
