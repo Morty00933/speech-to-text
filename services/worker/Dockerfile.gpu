@@ -1,0 +1,64 @@
+# ============================================================
+# Stage 1: Model Downloader - скачивает Whisper модели при сборке
+# ============================================================
+FROM python:3.12-slim AS model-downloader
+
+WORKDIR /download
+
+RUN pip install --no-cache-dir faster-whisper huggingface-hub
+
+# ARG для выбора моделей при сборке: "tiny,small", "tiny,small,medium", и т.д.
+ARG WHISPER_MODELS="tiny,small"
+
+RUN mkdir -p /models && \
+    python -c "\
+import os; \
+from huggingface_hub import snapshot_download; \
+models = os.environ.get('WHISPER_MODELS', 'tiny,small').split(','); \
+[snapshot_download(f'Systran/faster-whisper-{m.strip()}', local_dir=f'/models/faster-whisper-{m.strip()}') for m in models if m.strip()]; \
+print(f'Downloaded models: {models}')" && \
+    echo "Models downloaded successfully"
+
+# ============================================================
+# Stage 2: GPU Worker - финальный образ
+# ============================================================
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+
+ENV UV_SYSTEM_PYTHON=1
+ENV UV_COMPILE_BYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+WORKDIR /app
+
+# Системные зависимости + UV
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install uv
+
+# torchaudio (torch уже в базовом образе)
+RUN uv pip install torchaudio==2.5.1
+
+COPY worker/requirements.txt .
+RUN uv pip install -r requirements.txt
+
+COPY common/ ./common/
+COPY worker/ .
+COPY transcriber/ ./transcriber/
+
+# Копируем предзагруженные модели из stage 1
+COPY --from=model-downloader /models /models
+
+RUN mkdir -p /tmp/audio
+
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app /models /tmp/audio
+USER appuser
+
+CMD ["celery", "-A", "celery_app", "worker", \
+     "--loglevel=info", \
+     "--concurrency=1", \
+     "-Q", "transcription"]
