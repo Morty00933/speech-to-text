@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speech-to-Text Pipeline</title>
+<script src="/config.js"></script>
+<style>
+:root {
+  --bg:      #0f0f1a;
+  --bg2:     #1a1a2e;
+  --surface: rgba(255,255,255,0.05);
+  --surface2:rgba(255,255,255,0.09);
+  --border:  rgba(255,255,255,0.10);
+  --accent:  #667eea;
+  --accent2: #764ba2;
+  --grad:    linear-gradient(135deg,#667eea,#764ba2);
+  --text:    rgba(255,255,255,0.95);
+  --muted:   rgba(255,255,255,0.52);
+  --success: #38ef7d;
+  --danger:  #eb3349;
+  --warn:    #f6d365;
+  --r:       12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh}
+
+/* Navbar */
+.navbar{background:rgba(26,26,46,.96);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);padding:0 1.5rem;height:58px;
+  display:flex;align-items:center;gap:1.5rem;position:sticky;top:0;z-index:100}
+.brand{font-size:1.15rem;font-weight:700;background:var(--grad);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;white-space:nowrap;letter-spacing:-.3px}
+.nav-links{display:flex;gap:.2rem;flex:1}
+.nav-btn{background:transparent;border:none;color:var(--muted);padding:.42rem .85rem;
+  border-radius:7px;cursor:pointer;font-size:.86rem;transition:all .18s;font-weight:500}
+.nav-btn:hover{background:var(--surface);color:var(--text)}
+.nav-btn.active{background:var(--grad);color:#fff}
+#api-status{font-size:.75rem;white-space:nowrap}
+
+/* Layout */
+.container{padding:1.75rem;max-width:1180px;margin:0 auto}
+.page{display:none}.page.active{display:block}
+
+.page-header{background:var(--grad);border-radius:var(--r);padding:1.6rem 2rem;
+  text-align:center;margin-bottom:1.75rem;box-shadow:0 6px 28px rgba(102,126,234,.28)}
+.page-header h1{font-size:1.75rem;margin-bottom:.3rem;font-weight:700}
+.page-header p{color:rgba(255,255,255,.82);font-size:.9rem}
+
+.two-col{display:grid;grid-template-columns:1fr 340px;gap:1.75rem}
+@media(max-width:880px){.two-col{grid-template-columns:1fr}}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:1.35rem;margin-bottom:.85rem}
+.card-title{font-size:.72rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.6px;color:var(--muted);margin-bottom:.9rem}
+
+/* Input method tabs */
+.input-tabs{display:flex;border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;margin-bottom:1.1rem}
+.input-tab{flex:1;background:transparent;border:none;color:var(--muted);
+  padding:.6rem .5rem;cursor:pointer;font-size:.85rem;font-weight:500;
+  transition:all .18s;text-align:center}
+.input-tab:not(:last-child){border-right:1px solid var(--border)}
+.input-tab:hover{background:var(--surface);color:var(--text)}
+.input-tab.active{background:var(--grad);color:#fff}
+
+.input-panel{display:none}.input-panel.active{display:block}
+
+/* Drop zone */
+.drop-zone{border:2px dashed rgba(102,126,234,.4);border-radius:var(--r);
+  padding:2.25rem 2rem;text-align:center;cursor:pointer;transition:all .22s;
+  position:relative}
+.drop-zone:hover,.drop-zone.over{border-color:var(--accent);background:rgba(102,126,234,.07)}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-zone .dz-icon{font-size:2.25rem;display:block;margin-bottom:.6rem}
+.drop-zone p{color:var(--muted);margin:.18rem 0;font-size:.88rem}
+.drop-zone .hint{font-size:.72rem;margin-top:.6rem;opacity:.45}
+
+/* File preview */
+.file-preview{background:rgba(102,126,234,.08);border:1px solid rgba(102,126,234,.22);
+  border-radius:var(--r);padding:.9rem 1.1rem;display:flex;align-items:center;
+  gap:.9rem;margin:1rem 0}
+.file-preview .fi{font-size:1.85rem}
+.file-name{font-weight:600;font-size:.9rem}
+.file-meta{color:var(--muted);font-size:.78rem;margin-top:.18rem}
+audio{width:100%;border-radius:8px;margin:.65rem 0}
+
+/* Microphone */
+.mic-wrap{padding:1.5rem;text-align:center}
+.mic-state-idle{}
+.mic-state-rec{display:none}
+
+.mic-btn{width:80px;height:80px;border-radius:50%;border:none;cursor:pointer;
+  margin:0 auto .9rem;display:flex;align-items:center;justify-content:center;
+  font-size:1.8rem;transition:all .2s}
+.mic-btn-start{background:var(--grad);color:#fff;box-shadow:0 4px 20px rgba(102,126,234,.4)}
+.mic-btn-start:hover{transform:scale(1.06);box-shadow:0 6px 28px rgba(102,126,234,.5)}
+.mic-btn-stop{background:linear-gradient(135deg,#eb3349,#f45c43);color:#fff;
+  box-shadow:0 4px 20px rgba(235,51,73,.4)}
+.mic-btn-stop:hover{transform:scale(1.06)}
+
+.rec-indicator{display:flex;align-items:center;justify-content:center;gap:.5rem;
+  margin-bottom:.6rem}
+.rec-dot{width:10px;height:10px;border-radius:50%;background:#eb3349;
+  animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.rec-label{color:#eb3349;font-weight:700;font-size:.85rem;letter-spacing:.5px}
+.rec-timer{font-size:1.8rem;font-weight:700;font-family:'Monaco','Consolas',monospace;
+  letter-spacing:2px;margin:.4rem 0}
+
+.waveform-canvas{width:100%;height:60px;border-radius:8px;background:rgba(0,0,0,.2);display:block}
+
+.mic-note{font-size:.78rem;color:var(--muted);margin-top:.75rem;line-height:1.5}
+
+/* URL input */
+.url-wrap{padding:.5rem 0}
+.url-row{display:flex;gap:.6rem;margin-top:.5rem}
+.url-row input{flex:1}
+
+/* Submit button */
+.btn-submit{background:var(--grad);color:#fff;width:100%;justify-content:center;
+  font-size:.95rem;padding:.85rem;border:none;border-radius:8px;cursor:pointer;
+  font-weight:600;transition:all .2s;display:flex;align-items:center;gap:.4rem;margin-top:.85rem}
+.btn-submit:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 5px 20px rgba(102,126,234,.4)}
+.btn-submit:disabled{opacity:.42;cursor:not-allowed;transform:none}
+
+/* Generic buttons */
+.btn{border:none;padding:.58rem 1.1rem;border-radius:8px;cursor:pointer;font-size:.85rem;
+  font-weight:600;transition:all .18s;display:inline-flex;align-items:center;gap:.35rem}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn-sec{background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.btn-sec:hover{background:var(--surface2)}
+.btn-danger{background:linear-gradient(135deg,#eb3349,#f45c43);color:#fff}
+.btn-danger:hover{transform:translateY(-1px)}
+.btn-sm{padding:.3rem .65rem;font-size:.75rem}
+
+/* Inputs */
+input[type=text],input[type=number],input[type=password],select,textarea{
+  background:var(--surface);border:1px solid var(--border);color:var(--text);
+  padding:.58rem .85rem;border-radius:8px;font-size:.86rem;width:100%;outline:none;
+  transition:border-color .18s;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+select option{background:#1a1a2e}
+label.lbl{display:block;font-size:.77rem;color:var(--muted);margin-bottom:.3rem;margin-top:.7rem}
+
+/* Toggle */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:.38rem 0}
+.toggle-lbl{font-size:.86rem}
+.toggle{position:relative;width:40px;height:22px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.slider{position:absolute;inset:0;background:rgba(255,255,255,.14);border-radius:22px;
+  cursor:pointer;transition:.25s}
+.slider::before{content:'';position:absolute;width:16px;height:16px;background:#fff;
+  border-radius:50%;left:3px;top:3px;transition:.25s}
+.toggle input:checked+.slider{background:var(--accent)}
+.toggle input:checked+.slider::before{transform:translateX(18px)}
+
+/* Model picker */
+.model-picker{display:flex;flex-direction:column;gap:.45rem;margin-top:.3rem}
+.model-opt{border:1px solid var(--border);border-radius:9px;padding:.65rem .9rem;
+  cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:.8rem}
+.model-opt:hover{border-color:rgba(102,126,234,.5);background:rgba(102,126,234,.06)}
+.model-opt.selected{border-color:var(--accent);background:rgba(102,126,234,.12)}
+.model-opt-radio{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);
+  flex-shrink:0;transition:all .18s;display:flex;align-items:center;justify-content:center}
+.model-opt.selected .model-opt-radio{border-color:var(--accent);background:var(--accent)}
+.model-opt.selected .model-opt-radio::after{content:'';width:5px;height:5px;
+  border-radius:50%;background:#fff}
+.model-opt-info{flex:1;min-width:0}
+.model-opt-name{font-weight:700;font-size:.88rem}
+.model-opt-sub{font-size:.73rem;color:var(--muted);margin-top:.1rem}
+.model-tag{font-size:.67rem;font-weight:700;padding:.15rem .45rem;border-radius:99px;
+  white-space:nowrap;flex-shrink:0}
+.tag-ready{background:rgba(56,239,125,.15);color:#38ef7d;border:1px solid rgba(56,239,125,.3)}
+.tag-download{background:rgba(255,255,255,.07);color:var(--muted);border:1px solid var(--border)}
+.tag-default{background:rgba(102,126,234,.2);color:#a0afff;border:1px solid rgba(102,126,234,.3)}
+
+/* Monitoring */
+.monitor-card{max-width:560px;margin:3rem auto}
+.monitor-card h2{text-align:center;margin-bottom:1.4rem;font-size:1.4rem}
+.pbar{background:rgba(255,255,255,.1);border-radius:99px;height:7px;overflow:hidden;margin:1.1rem 0}
+.pbar-fill{height:100%;background:var(--grad);border-radius:99px;transition:width .45s ease;width:0%}
+.monitor-info{text-align:center}
+.monitor-step{font-size:1.2rem;font-weight:700;margin-bottom:.35rem}
+.monitor-meta{color:var(--muted);font-size:.85rem}
+
+/* Badges */
+.badge{display:inline-block;padding:.2rem .6rem;border-radius:99px;font-size:.7rem;
+  font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.badge-queued   {background:rgba(246,211,101,.14);color:#f6d365}
+.badge-processing{background:rgba(102,126,234,.18);color:#a0afff;animation:pulse 2s infinite}
+.badge-completed{background:rgba(56,239,125,.14);color:#38ef7d}
+.badge-failed   {background:rgba(235,51,73,.14);color:#f45c43}
+.badge-cancelled{background:rgba(255,255,255,.07);color:var(--muted)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+
+/* Metrics */
+.metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.85rem;margin-bottom:1.35rem}
+@media(max-width:680px){.metrics-grid{grid-template-columns:repeat(2,1fr)}}
+.metric-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:1.1rem;text-align:center}
+.metric-ico{font-size:1.3rem;margin-bottom:.35rem}
+.metric-val{font-size:1.25rem;font-weight:700;background:var(--grad);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.metric-lbl{color:var(--muted);font-size:.75rem;margin-top:.2rem}
+
+/* Segments */
+.seg-wrap{max-height:360px;overflow-y:auto;border:1px solid var(--border);
+  border-radius:var(--r);padding:.4rem}
+.seg{border-left:3px solid var(--accent);padding:.6rem .9rem;margin:.35rem 0;
+  background:rgba(255,255,255,.02);border-radius:0 8px 8px 0}
+.seg-time{font-family:'Monaco','Consolas',monospace;font-size:.75rem;
+  color:var(--accent);font-weight:600}
+.seg-spk{display:inline-block;background:var(--grad);color:#fff;padding:.08rem .4rem;
+  border-radius:99px;font-size:.65rem;font-weight:600;margin-left:.35rem}
+.seg-text{margin-top:.3rem;line-height:1.5;font-size:.88rem;color:rgba(255,255,255,.85)}
+
+/* Download grid */
+.dl-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-top:.7rem}
+@media(max-width:560px){.dl-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* History */
+.hist-ctrl{display:flex;gap:.65rem;align-items:center;margin-bottom:1.1rem;flex-wrap:wrap}
+.hist-ctrl select{width:auto}
+.job-row{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr auto;gap:.65rem;
+  align-items:center;padding:.8rem .65rem;border-bottom:1px solid var(--border);
+  transition:background .14s}
+.job-row:hover{background:var(--surface);border-radius:8px}
+.job-id{font-family:'Monaco','Consolas',monospace;font-size:.75rem;color:var(--muted)}
+
+/* Services / Models */
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:.85rem}
+.svc-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:1rem;text-align:center}
+.model-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:.85rem}
+.dash-model-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:1.05rem}
+.dash-model-name{font-size:.95rem;font-weight:700;text-transform:uppercase;
+  background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text}
+.dash-model-size{color:var(--muted);font-size:.78rem;margin-bottom:.5rem}
+.dash-model-d{font-size:.76rem;color:var(--muted);margin-top:.25rem}
+
+/* Alerts */
+.alert{padding:.65rem .9rem;border-radius:8px;margin:.65rem 0;font-size:.85rem;line-height:1.5}
+.alert-err {background:rgba(235,51,73,.11);border:1px solid rgba(235,51,73,.28);color:#f45c43}
+.alert-ok  {background:rgba(56,239,125,.11);border:1px solid rgba(56,239,125,.28);color:#38ef7d}
+.alert-warn{background:rgba(246,211,101,.11);border:1px solid rgba(246,211,101,.28);color:#fda085}
+.alert-info{background:rgba(102,126,234,.11);border:1px solid rgba(102,126,234,.28);color:#a8b5ff}
+
+/* Loader */
+.loader{text-align:center;padding:2.5rem;color:var(--muted)}
+.spin{display:inline-block;width:17px;height:17px;border:2px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;
+  vertical-align:middle;margin-right:.35rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Misc */
+.hidden{display:none!important}
+.sec-title{font-size:.95rem;font-weight:600;margin:1.35rem 0 .65rem}
+textarea{min-height:125px;resize:vertical}
+
+/* Balloon effect */
+.balloon{position:fixed;font-size:1.8rem;pointer-events:none;z-index:9999;
+  animation:floatup 3s ease-in forwards}
+@keyframes floatup{0%{transform:translateY(0) rotate(0deg);opacity:1}
+  100%{transform:translateY(-106vh) rotate(540deg);opacity:0}}
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     Navbar
+================================================================ -->
+<header class="navbar">
+  <div class="brand">Speech-to-Text</div>
+  <nav class="nav-links">
+    <button class="nav-btn active" data-page="transcribe" onclick="navigate('transcribe')">Transcribe</button>
+    <button class="nav-btn" data-page="history"    onclick="navigate('history')">History</button>
+    <button class="nav-btn" data-page="dashboard"  onclick="navigate('dashboard')">Dashboard</button>
+    <button class="nav-btn" data-page="settings"   onclick="navigate('settings')">Settings</button>
+  </nav>
+  <div id="api-status"></div>
+</header>
+
+<main class="container">
+
+<!-- ================================================================
+     Transcribe Page
+================================================================ -->
+<section id="page-transcribe" class="page active">
+  <div class="page-header">
+    <h1>Audio Transcription</h1>
+    <p>Upload, record, or paste a URL — get AI-powered transcription via Whisper</p>
+  </div>
+
+  <!-- Monitoring state -->
+  <div id="monitoring-section" class="hidden">
+    <div class="monitor-card card">
+      <h2>Transcribing...</h2>
+      <div class="pbar"><div id="pbar-fill" class="pbar-fill"></div></div>
+      <div class="monitor-info">
+        <div id="mon-step" class="monitor-step">Initializing</div>
+        <div id="mon-meta" class="monitor-meta">Elapsed: 0s</div>
+      </div>
+      <div id="mon-warn" class="alert alert-warn hidden" style="margin-top:.9rem">
+        Taking longer than usual. On first run the AI model downloads (1 - 5 GB).
+        Check worker logs: <code>docker compose logs worker -f</code>
+      </div>
+      <div style="text-align:center;margin-top:1.1rem">
+        <button class="btn btn-danger" onclick="cancelCurrentJob()">Cancel Job</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result state -->
+  <div id="result-section" class="hidden"></div>
+
+  <!-- Upload/Record/URL state -->
+  <div id="upload-section">
+    <div class="two-col">
+      <!-- Left column: input methods -->
+      <div>
+        <!-- Input method tabs -->
+        <div class="input-tabs">
+          <button class="input-tab active" data-tab="file"  onclick="switchTab('file')">File Upload</button>
+          <button class="input-tab"        data-tab="mic"   onclick="switchTab('mic')">Microphone</button>
+          <button class="input-tab"        data-tab="url"   onclick="switchTab('url')">From URL</button>
+        </div>
+
+        <!-- File Upload panel -->
+        <div id="panel-file" class="input-panel active">
+          <div id="drop-zone" class="drop-zone">
+            <input type="file" id="file-input" accept=".mp3,.wav,.flac,.ogg,.m4a,.webm,.mp4" onchange="onFileSelected(this)">
+            <span class="dz-icon">+</span>
+            <p>Drag and drop audio file here</p>
+            <p>or click to browse</p>
+            <p class="hint">MP3 · WAV · FLAC · OGG · M4A · WebM · MP4</p>
+          </div>
+          <div id="file-preview" class="file-preview hidden">
+            <div class="fi">&#9835;</div>
+            <div>
+              <div class="file-name" id="file-name-disp"></div>
+              <div class="file-meta" id="file-meta-disp"></div>
+            </div>
+          </div>
+          <audio id="audio-preview" controls class="hidden"></audio>
+          <button id="transcribe-file-btn" class="btn-submit hidden" onclick="transcribeFile()">
+            Start Transcription
+          </button>
+          <div id="file-err" class="alert alert-err hidden"></div>
+        </div>
+
+        <!-- Microphone panel -->
+        <div id="panel-mic" class="input-panel">
+          <div class="mic-wrap">
+            <!-- Idle state -->
+            <div id="mic-idle">
+              <button class="mic-btn mic-btn-start" id="mic-start-btn" onclick="startRecording()">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm6 8a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93V21H8v2h8v-2h-3v-2.07A8 8 0 0 0 20 11h-2z"/>
+                </svg>
+              </button>
+              <p style="color:var(--muted);font-size:.88rem">Click to record from microphone</p>
+              <p class="mic-note">Browser will ask for microphone permission.<br>Supports Chrome, Firefox, Edge, Safari.</p>
+            </div>
+
+            <!-- Recording state -->
+            <div id="mic-rec" class="hidden">
+              <div class="rec-indicator">
+                <div class="rec-dot"></div>
+                <span class="rec-label">REC</span>
+              </div>
+              <div class="rec-timer" id="rec-timer">00:00</div>
+              <canvas class="waveform-canvas" id="waveform-canvas" height="60"></canvas>
+              <div style="margin-top:1rem">
+                <button class="mic-btn mic-btn-stop" onclick="stopRecording()" style="margin:0 auto">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  </svg>
+                </button>
+              </div>
+              <p style="color:var(--muted);font-size:.82rem;margin-top:.65rem">Click to stop recording</p>
+            </div>
+
+            <!-- Recorded preview -->
+            <div id="mic-recorded" class="hidden">
+              <div class="file-preview" style="margin:0 0 .75rem">
+                <div class="fi">&#9835;</div>
+                <div>
+                  <div class="file-name" id="rec-file-name">recording.webm</div>
+                  <div class="file-meta" id="rec-file-meta"></div>
+                </div>
+              </div>
+              <audio id="rec-preview" controls></audio>
+              <div style="display:flex;gap:.6rem;margin-top:.65rem">
+                <button class="btn btn-sec" onclick="discardRecording()" style="flex:1">
+                  Record Again
+                </button>
+                <button class="btn-submit" onclick="transcribeFile()" style="flex:2;margin:0">
+                  Transcribe Recording
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="mic-err" class="alert alert-err hidden"></div>
+        </div>
+
+        <!-- URL panel -->
+        <div id="panel-url" class="input-panel">
+          <div class="url-wrap">
+            <p style="color:var(--muted);font-size:.86rem;margin-bottom:.6rem">
+              Paste a direct link to an audio file (MP3, WAV, FLAC, OGG, M4A, WebM, MP4).
+            </p>
+            <div class="url-row">
+              <input type="text" id="url-input" placeholder="https://example.com/audio.mp3">
+              <button class="btn btn-sec" onclick="transcribeUrl()">Transcribe</button>
+            </div>
+          </div>
+          <div id="url-err" class="alert alert-err hidden"></div>
+        </div>
+      </div>
+
+      <!-- Right column: options -->
+      <div>
+        <div class="card">
+          <div class="card-title">Options</div>
+
+          <!-- Model picker (populated from API) -->
+          <label class="lbl">Model Quality</label>
+          <div id="model-picker" class="model-picker">
+            <div class="loader" style="padding:.8rem"><span class="spin"></span>Loading models...</div>
+          </div>
+          <input type="hidden" id="opt-model" value="medium">
+
+          <label class="lbl">Language</label>
+          <select id="opt-lang">
+            <option value="">Auto-detect</option>
+            <option value="en">English</option>
+            <option value="ru">Russian</option>
+            <option value="de">German</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="zh">Chinese</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="pt">Portuguese</option>
+            <option value="it">Italian</option>
+            <option value="nl">Dutch</option>
+            <option value="pl">Polish</option>
+            <option value="uk">Ukrainian</option>
+          </select>
+
+          <label class="lbl">Output Format</label>
+          <select id="opt-format">
+            <option value="json">JSON</option>
+            <option value="srt">SRT (subtitles)</option>
+            <option value="vtt">VTT (WebVTT)</option>
+            <option value="txt">Plain text</option>
+          </select>
+
+          <div style="margin-top:.85rem">
+            <div class="toggle-row">
+              <span class="toggle-lbl">Timestamps</span>
+              <label class="toggle"><input type="checkbox" id="opt-ts" checked><span class="slider"></span></label>
+            </div>
+            <div class="toggle-row">
+              <span class="toggle-lbl">Auto Punctuation</span>
+              <label class="toggle"><input type="checkbox" id="opt-punct" checked><span class="slider"></span></label>
+            </div>
+            <div class="toggle-row">
+              <span class="toggle-lbl">Speaker Detection</span>
+              <label class="toggle"><input type="checkbox" id="opt-diar" onchange="toggleDiar(this)"><span class="slider"></span></label>
+            </div>
+          </div>
+
+          <div id="spk-opts" style="display:none;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.6rem">
+            <div><label class="lbl">Min Speakers</label><input type="number" id="opt-minspc" value="1" min="1" max="20"></div>
+            <div><label class="lbl">Max Speakers</label><input type="number" id="opt-maxspc" value="10" min="1" max="20"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Tips</div>
+          <ul style="color:var(--muted);font-size:.81rem;line-height:2.1;padding-left:1.1rem">
+            <li>Clear audio without background noise works best</li>
+            <li>MP3 and WAV formats recommended</li>
+            <li>Use medium model for long recordings</li>
+            <li>Enable Speaker Detection for interviews</li>
+            <li>Downloaded models start immediately</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     History Page
+================================================================ -->
+<section id="page-history" class="page">
+  <div class="page-header">
+    <h1>Transcription History</h1>
+    <p>View and manage your past transcriptions</p>
+  </div>
+  <div class="hist-ctrl">
+    <select id="hist-status" onchange="loadHistory()" style="width:175px">
+      <option value="">All statuses</option>
+      <option value="queued">Queued</option>
+      <option value="processing">Processing</option>
+      <option value="completed">Completed</option>
+      <option value="failed">Failed</option>
+    </select>
+    <select id="hist-limit" onchange="loadHistory()" style="width:115px">
+      <option value="10">Show 10</option>
+      <option value="25" selected>Show 25</option>
+      <option value="50">Show 50</option>
+      <option value="100">Show 100</option>
+    </select>
+    <button class="btn btn-sec" onclick="loadHistory()">Refresh</button>
+  </div>
+  <div id="hist-list"><div class="loader"><span class="spin"></span>Loading...</div></div>
+  <div id="hist-result" class="hidden" style="margin-top:1.5rem"></div>
+</section>
+
+<!-- ================================================================
+     Dashboard Page
+================================================================ -->
+<section id="page-dashboard" class="page">
+  <div class="page-header">
+    <h1>System Dashboard</h1>
+    <p>Monitor system health and performance</p>
+  </div>
+  <div id="dash-content"><div class="loader"><span class="spin"></span>Loading...</div></div>
+</section>
+
+<!-- ================================================================
+     Settings Page
+================================================================ -->
+<section id="page-settings" class="page">
+  <div class="page-header">
+    <h1>Settings</h1>
+    <p>Configuration and documentation</p>
+  </div>
+  <div class="card">
+    <div class="card-title">API Configuration</div>
+    <label class="lbl">API Endpoint (proxied by nginx)</label>
+    <input type="text" id="s-url" disabled>
+    <label class="lbl">API Key</label>
+    <input type="password" id="s-key" disabled>
+    <div class="alert alert-info" style="margin-top:.8rem">
+      To change API settings, update environment variables and restart the containers.
+    </div>
+  </div>
+  <div class="card" style="margin-top:.85rem">
+    <div class="card-title">Documentation</div>
+    <ul style="line-height:2.4;padding-left:1.1rem">
+      <li><a href="/api/docs"             target="_blank" style="color:var(--accent)">API Documentation (Swagger)</a></li>
+      <li><a href="http://localhost:3000" target="_blank" style="color:var(--accent)">Grafana Dashboard</a></li>
+      <li><a href="http://localhost:9001" target="_blank" style="color:var(--accent)">MinIO Console</a></li>
+      <li><a href="http://localhost:9090" target="_blank" style="color:var(--accent)">Prometheus Metrics</a></li>
+    </ul>
+  </div>
+  <div class="card" style="margin-top:.85rem">
+    <div class="card-title">About</div>
+    <p style="color:var(--muted);line-height:1.9">
+      <b style="color:var(--text)">Speech-to-Text Pipeline</b> v1.0.0<br><br>
+      Faster-Whisper — transcription engine<br>
+      Pyannote.audio — speaker diarization<br>
+      Celery + Redis — async task queue<br>
+      PostgreSQL — job metadata<br>
+      MinIO — audio object storage<br>
+      Docker — containerization
+    </p>
+  </div>
+</section>
+
+</main>
+
+<!-- ================================================================
+     Application Script
+================================================================ -->
+<script>
+'use strict';
+
+const API_KEY  = (window.CONFIG && window.CONFIG.apiKey) ? window.CONFIG.apiKey : 'dev-api-key';
+const API_BASE = '/api';
+
+/* ----------------------------------------------------------------
+   State
+---------------------------------------------------------------- */
+let selectedFile      = null;
+let monitoringJobId   = null;
+let monitorInterval   = null;
+let monitorStartTime  = null;
+let monitorFailCount  = 0;
+let transcribeResult  = null;
+let transcribeJobId   = null;
+let histResult        = null;
+let histJobId         = null;
+
+/* ----------------------------------------------------------------
+   Microphone state
+---------------------------------------------------------------- */
+let mediaRecorder    = null;
+let audioChunks      = [];
+let recordingStream  = null;
+let recordingTimer   = null;
+let recordingSeconds = 0;
+let analyserNode     = null;
+let waveAnimFrame    = null;
+let audioCtx         = null;
+
+/* ----------------------------------------------------------------
+   Navigation
+---------------------------------------------------------------- */
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const target = document.getElementById('page-' + page);
+  target.classList.remove('hidden');
+  target.classList.add('active');
+  document.querySelector('[data-page="' + page + '"]').classList.add('active');
+  if (page === 'history')   loadHistory();
+  if (page === 'dashboard') loadDashboard();
+  if (page === 'settings')  loadSettings();
+}
+
+/* ----------------------------------------------------------------
+   Input method tabs
+---------------------------------------------------------------- */
+function switchTab(tab) {
+  document.querySelectorAll('.input-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-tab="' + tab + '"]').classList.add('active');
+  const panel = document.getElementById('panel-' + tab);
+  panel.classList.remove('hidden');
+  panel.classList.add('active');
+}
+
+/* ----------------------------------------------------------------
+   API helpers
+---------------------------------------------------------------- */
+async function apiFetch(method, path, body, isForm) {
+  const headers = { 'X-API-Key': API_KEY };
+  if (!isForm && body) headers['Content-Type'] = 'application/json';
+  const opts = { method, headers };
+  if (body) opts.body = isForm ? body : JSON.stringify(body);
+  const res = await fetch(API_BASE + path, opts);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error('HTTP ' + res.status + ': ' + txt);
+  }
+  const ct = res.headers.get('Content-Type') || '';
+  if (ct.includes('application/json')) return res.json();
+  return res.text();
+}
+const apiGet    = p       => apiFetch('GET',    p);
+const apiPost   = (p, b)  => apiFetch('POST',   p, b);
+const apiPostF  = (p, fd) => apiFetch('POST',   p, fd, true);
+const apiDelete = p       => apiFetch('DELETE', p);
+
+/* ----------------------------------------------------------------
+   API health check
+---------------------------------------------------------------- */
+async function checkHealth() {
+  const el = document.getElementById('api-status');
+  try {
+    await apiGet('/health');
+    el.innerHTML = '<span style="color:#38ef7d">API Online</span>';
+  } catch {
+    el.innerHTML = '<span style="color:#eb3349">API Offline</span>';
+  }
+}
+
+/* ----------------------------------------------------------------
+   Model picker — load from API and render custom radio list
+---------------------------------------------------------------- */
+async function loadModelPicker() {
+  const container = document.getElementById('model-picker');
+  try {
+    const data = await apiGet('/jobs/models');
+    const models  = data.models  || [];
+    const defModel = data.default_model || 'medium';
+
+    // Set default selection
+    document.getElementById('opt-model').value = defModel;
+
+    container.innerHTML = models.map(m => {
+      const isDefault    = m.name === defModel;
+      const isSelected   = m.name === defModel;
+      const tagHtml = m.downloaded
+        ? '<span class="model-tag tag-ready">Downloaded</span>'
+        : isDefault
+          ? '<span class="model-tag tag-default">Default</span>'
+          : '<span class="model-tag tag-download">Will download</span>';
+
+      return `
+        <div class="model-opt${isSelected ? ' selected' : ''}" onclick="selectModel('${esc(m.name)}')">
+          <div class="model-opt-radio"></div>
+          <div class="model-opt-info">
+            <div class="model-opt-name">${esc(m.name)}</div>
+            <div class="model-opt-sub">${esc(m.size)} &middot; ${m.vram_required_gb} GB VRAM &middot; ${esc(m.description)}</div>
+          </div>
+          ${tagHtml}
+        </div>
+      `;
+    }).join('');
+  } catch {
+    container.innerHTML = `
+      <div style="font-size:.82rem;color:var(--muted);padding:.4rem 0">
+        Could not load model list. Using default selection.
+      </div>
+      <select id="opt-model-fallback" onchange="document.getElementById('opt-model').value=this.value" style="margin-top:.5rem">
+        <option value="tiny">tiny</option>
+        <option value="base">base</option>
+        <option value="small">small</option>
+        <option value="medium" selected>medium (recommended)</option>
+        <option value="large-v3">large-v3</option>
+      </select>
+    `;
+  }
+}
+
+function selectModel(name) {
+  document.getElementById('opt-model').value = name;
+  document.querySelectorAll('.model-opt').forEach(el => {
+    el.classList.toggle('selected', el.getAttribute('onclick').includes("'" + name + "'"));
+  });
+}
+
+/* ----------------------------------------------------------------
+   File selection
+---------------------------------------------------------------- */
+function onFileSelected(input) {
+  if (!input.files || !input.files[0]) return;
+  selectedFile = input.files[0];
+  renderFilePreview(selectedFile);
+}
+
+function renderFilePreview(file) {
+  document.getElementById('file-name-disp').textContent = file.name;
+  document.getElementById('file-meta-disp').textContent = fmtSize(file.size) + ' · ' + (file.type || 'audio');
+  show('file-preview');
+  show('transcribe-file-btn');
+  const audio = document.getElementById('audio-preview');
+  audio.src = URL.createObjectURL(file);
+  audio.classList.remove('hidden');
+}
+
+// Drag & drop
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) { selectedFile = f; renderFilePreview(f); }
+});
+
+/* ----------------------------------------------------------------
+   Microphone recording
+---------------------------------------------------------------- */
+async function startRecording() {
+  hide('mic-err');
+  const btn = document.getElementById('mic-start-btn');
+  btn.disabled = true;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    recordingStream  = stream;
+    recordingSeconds = 0;
+    audioChunks      = [];
+
+    // Pick best supported MIME type
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg']
+      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+
+    mediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      const finalMime = mediaRecorder.mimeType || 'audio/webm';
+      const ext  = finalMime.includes('ogg') ? 'ogg' : 'webm';
+      const blob = new Blob(audioChunks, { type: finalMime });
+      const name = 'recording_' + Date.now() + '.' + ext;
+      selectedFile = new File([blob], name, { type: finalMime });
+
+      // Show recorded preview
+      document.getElementById('rec-file-name').textContent = name;
+      document.getElementById('rec-file-meta').textContent =
+        fmtSize(blob.size) + ' · ' + Math.floor(recordingSeconds / 60) + 'm ' + (recordingSeconds % 60) + 's';
+      document.getElementById('rec-preview').src = URL.createObjectURL(blob);
+
+      hide('mic-idle');
+      hide('mic-rec');
+      show('mic-recorded');
+
+      stopWaveform();
+      recordingStream.getTracks().forEach(t => t.stop());
+      recordingStream = null;
+    };
+
+    mediaRecorder.start(250);
+
+    // Timer
+    recordingTimer = setInterval(() => {
+      recordingSeconds++;
+      const m = Math.floor(recordingSeconds / 60);
+      const s = recordingSeconds % 60;
+      document.getElementById('rec-timer').textContent = pad(m) + ':' + pad(s);
+    }, 1000);
+
+    // Waveform
+    startWaveform(stream);
+
+    // Switch UI to recording state
+    show('mic-rec');
+    hide('mic-idle');
+    hide('mic-recorded');
+
+  } catch (err) {
+    let msg = 'Microphone access failed: ' + err.message;
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      msg = 'Microphone access denied. Please allow microphone access in your browser settings.';
+    } else if (err.name === 'NotFoundError') {
+      msg = 'No microphone found. Please connect a microphone and try again.';
+    }
+    showErr('mic-err', msg);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function stopRecording() {
+  clearInterval(recordingTimer);
+  recordingTimer = null;
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+}
+
+function discardRecording() {
+  selectedFile = null;
+  audioChunks  = [];
+  hide('mic-recorded');
+  show('mic-idle');
+  document.getElementById('rec-preview').src = '';
+}
+
+/* ----------------------------------------------------------------
+   Waveform visualizer (Web Audio API AnalyserNode)
+---------------------------------------------------------------- */
+function startWaveform(stream) {
+  try {
+    audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
+    analyserNode = audioCtx.createAnalyser();
+    analyserNode.fftSize        = 128;
+    analyserNode.smoothingTimeConstant = 0.7;
+
+    const source = audioCtx.createMediaStreamSource(stream);
+    source.connect(analyserNode);
+
+    const canvas  = document.getElementById('waveform-canvas');
+    const ctx     = canvas.getContext('2d');
+    const bufLen  = analyserNode.frequencyBinCount;
+    const dataArr = new Uint8Array(bufLen);
+
+    function draw() {
+      waveAnimFrame = requestAnimationFrame(draw);
+      analyserNode.getByteFrequencyData(dataArr);
+
+      // Resize canvas to actual display size
+      const W = canvas.offsetWidth;
+      const H = canvas.offsetHeight;
+      canvas.width  = W;
+      canvas.height = H;
+
+      ctx.clearRect(0, 0, W, H);
+      const barW = W / bufLen;
+      for (let i = 0; i < bufLen; i++) {
+        const v  = dataArr[i] / 255;
+        const bh = v * H;
+        const alpha = 0.45 + v * 0.55;
+        ctx.fillStyle = 'rgba(102,126,234,' + alpha + ')';
+        ctx.fillRect(i * barW, H - bh, barW - 1, bh);
+      }
+    }
+    draw();
+  } catch { /* Web Audio API unavailable — continue without visualizer */ }
+}
+
+function stopWaveform() {
+  if (waveAnimFrame) { cancelAnimationFrame(waveAnimFrame); waveAnimFrame = null; }
+  if (audioCtx) { audioCtx.close().catch(() => {}); audioCtx = null; }
+  analyserNode = null;
+}
+
+/* ----------------------------------------------------------------
+   Transcribe — File (also used for microphone recording)
+---------------------------------------------------------------- */
+async function transcribeFile() {
+  if (!selectedFile) return;
+  const btn = document.querySelector('#panel-file .btn-submit, #panel-mic .btn-submit, #transcribe-file-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Uploading...'; }
+  hide('file-err');
+  hide('mic-err');
+
+  try {
+    const fd = new FormData();
+    fd.append('file',               selectedFile, selectedFile.name);
+    fd.append('model_size',         document.getElementById('opt-model').value);
+    fd.append('enable_diarization', chk('opt-diar')  ? 'true' : 'false');
+    fd.append('enable_timestamps',  chk('opt-ts')    ? 'true' : 'false');
+    fd.append('enable_punctuation', chk('opt-punct') ? 'true' : 'false');
+    fd.append('output_format',      sel('opt-format'));
+    fd.append('min_speakers',       document.getElementById('opt-minspc').value);
+    const maxS = document.getElementById('opt-maxspc').value;
+    if (maxS) fd.append('max_speakers', maxS);
+    const lang = sel('opt-lang');
+    if (lang) fd.append('language', lang);
+
+    const result = await apiPostF('/transcribe/file', fd);
+    const jobId  = result && result.job_id;
+    if (!jobId) throw new Error('API did not return a job_id: ' + JSON.stringify(result));
+    startMonitoring(jobId);
+  } catch (err) {
+    showErr('file-err', err.message);
+    showErr('mic-err', err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Start Transcription'; }
+  }
+}
+
+/* ----------------------------------------------------------------
+   Transcribe — URL
+---------------------------------------------------------------- */
+async function transcribeUrl() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) return;
+  hide('url-err');
+
+  try {
+    const result = await apiPost('/transcribe/url', {
+      url,
+      options: {
+        model_size:         document.getElementById('opt-model').value,
+        enable_diarization: chk('opt-diar'),
+        enable_timestamps:  chk('opt-ts'),
+        enable_punctuation: chk('opt-punct'),
+        output_format:      sel('opt-format'),
+        min_speakers:       parseInt(document.getElementById('opt-minspc').value) || 1,
+        max_speakers:       parseInt(document.getElementById('opt-maxspc').value) || null,
+        language:           sel('opt-lang') || null,
+      }
+    });
+    const jobId = result && result.job_id;
+    if (!jobId) throw new Error('API did not return a job_id: ' + JSON.stringify(result));
+    startMonitoring(jobId);
+  } catch (err) {
+    showErr('url-err', err.message);
+  }
+}
+
+/* ----------------------------------------------------------------
+   Job monitoring  (setInterval + fetch — no WebSocket)
+---------------------------------------------------------------- */
+function startMonitoring(jobId) {
+  monitoringJobId  = jobId;
+  monitorStartTime = Date.now();
+  monitorFailCount = 0;
+
+  hide('upload-section');
+  hide('result-section');
+  show('monitoring-section');
+  hide('mon-warn');
+  setMonitorUI(0, 'queued', 'queued', 0);
+
+  monitorInterval = setInterval(pollJob, 2000);
+}
+
+async function pollJob() {
+  try {
+    const job = await apiGet('/jobs/' + monitoringJobId);
+    monitorFailCount = 0;
+
+    const progress = Number(job.progress) || 0;
+    const status   = job.status       || 'unknown';
+    const step     = job.current_step || 'initializing';
+    const elapsed  = Math.floor((Date.now() - monitorStartTime) / 1000);
+
+    setMonitorUI(progress, status, step, elapsed);
+
+    if (elapsed > 60 && progress < 15 && ['queued','processing'].includes(status)) {
+      show('mon-warn');
+    }
+
+    if (status === 'completed') {
+      stopMonitoring();
+      launchBalloons();
+      await showResult(monitoringJobId);
+      monitoringJobId = null;
+    } else if (status === 'failed') {
+      stopMonitoring();
+      show('upload-section');
+      showErr('file-err', 'Transcription failed: ' + (job.error_message || 'Unknown error'));
+      monitoringJobId = null;
+    } else if (status === 'cancelled') {
+      stopMonitoring();
+      show('upload-section');
+      monitoringJobId = null;
+    }
+  } catch (err) {
+    monitorFailCount++;
+    document.getElementById('mon-meta').textContent =
+      'API unreachable (' + monitorFailCount + '/5): ' + err.message;
+    if (monitorFailCount >= 5) {
+      stopMonitoring();
+      show('upload-section');
+      showErr('file-err', 'Lost connection to API after 5 retries: ' + err.message);
+      monitoringJobId = null;
+    }
+  }
+}
+
+function stopMonitoring() {
+  clearInterval(monitorInterval);
+  monitorInterval = null;
+  hide('monitoring-section');
+}
+
+function setMonitorUI(pct, status, step, elapsed) {
+  document.getElementById('pbar-fill').style.width = Math.min(pct, 100) + '%';
+  const labels = {
+    queued:'Queued', downloading:'Downloading', preprocessing:'Preprocessing',
+    transcribing:'Transcribing', diarizing:'Speaker Detection',
+    postprocessing:'Post-processing', formatting:'Formatting',
+    saving:'Saving', completed:'Completed', initializing:'Initializing'
+  };
+  const label = labels[step] || step.replace(/_/g,' ');
+  document.getElementById('mon-step').textContent = label + ' — ' + pct + '%';
+  const es = elapsed >= 60 ? Math.floor(elapsed/60) + 'm ' + (elapsed%60) + 's' : elapsed + 's';
+  document.getElementById('mon-meta').textContent = 'Status: ' + status + '  |  Elapsed: ' + es;
+}
+
+async function cancelCurrentJob() {
+  if (!monitoringJobId) return;
+  try {
+    await apiDelete('/jobs/' + monitoringJobId);
+    stopMonitoring();
+    monitoringJobId = null;
+    show('upload-section');
+  } catch (err) {
+    alert('Failed to cancel: ' + err.message);
+  }
+}
+
+/* ----------------------------------------------------------------
+   Result display
+---------------------------------------------------------------- */
+async function showResult(jobId) {
+  const sec = document.getElementById('result-section');
+  sec.innerHTML = '<div class="loader"><span class="spin"></span>Loading result...</div>';
+  show('result-section');
+
+  try {
+    const result = await apiGet('/jobs/' + jobId + '/result');
+    transcribeResult = result;
+    transcribeJobId  = jobId;
+    sec.innerHTML = buildResultHtml(jobId, result, 'download');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    sec.innerHTML = '<div class="alert alert-err">Failed to load result: ' + esc(err.message) + '</div>';
+  }
+}
+
+function buildResultHtml(jobId, result, dlPfx) {
+  const meta     = result.metadata || {};
+  const segments = result.segments || [];
+  const text     = result.text     || '';
+
+  const segsHtml = segments.length ? `
+    <div class="sec-title">Timeline (${segments.length} segments)</div>
+    <div class="seg-wrap">
+      ${segments.slice(0,100).map(s => `
+        <div class="seg">
+          <span class="seg-time">${fmtTs(s.start||0)} &ndash; ${fmtTs(s.end||0)}</span>
+          ${s.speaker ? '<span class="seg-spk">' + esc(s.speaker) + '</span>' : ''}
+          <div class="seg-text">${esc(s.text||'')}</div>
+        </div>
+      `).join('')}
+      ${segments.length > 100 ? '<div class="alert alert-info">Showing 100 of ' + segments.length + ' segments. Download JSON for full results.</div>' : ''}
+    </div>
+  ` : '';
+
+  return `
+    <div class="alert alert-ok">Transcription complete  &mdash;  job <code>${esc(jobId.slice(0,8))}...</code></div>
+    <div class="metrics-grid">
+      ${metricCard('Language', (meta.language||'N/A').toUpperCase())}
+      ${metricCard('Duration', fmtDur(meta.duration||0))}
+      ${metricCard('Processing', fmtDur(meta.processing_time||0))}
+      ${metricCard('Model', meta.model_used||'N/A')}
+    </div>
+    <div class="sec-title">Full Transcription</div>
+    <textarea readonly rows="8">${esc(text)}</textarea>
+    <div class="sec-title">Download</div>
+    <div class="dl-grid">
+      <button class="btn btn-sec" onclick="${dlPfx}Json()">JSON</button>
+      <button class="btn btn-sec" onclick="${dlPfx}Txt()">Text</button>
+      <button class="btn btn-sec" onclick="${dlPfx}Srt()">SRT</button>
+      <button class="btn btn-sec" onclick="${dlPfx}Vtt()">VTT</button>
+    </div>
+    ${segsHtml}
+    <div style="text-align:center;margin-top:1.4rem">
+      <button class="btn btn-sec" onclick="resetForNew()">Transcribe Another File</button>
+    </div>
+  `;
+}
+
+function resetForNew() {
+  hide('result-section');
+  hide('monitoring-section');
+  show('upload-section');
+  hide('file-preview');
+  hide('transcribe-file-btn');
+  document.getElementById('audio-preview').classList.add('hidden');
+  document.getElementById('audio-preview').src = '';
+  document.getElementById('file-input').value  = '';
+  document.getElementById('url-input').value   = '';
+  hide('mic-recorded');
+  show('mic-idle');
+  document.getElementById('rec-preview').src = '';
+  selectedFile = null;
+  transcribeResult = null;
+  transcribeJobId  = null;
+}
+
+/* ----------------------------------------------------------------
+   Download helpers — Transcribe page
+---------------------------------------------------------------- */
+function downloadJson() { if(transcribeResult) dlBlob(JSON.stringify(transcribeResult,null,2),'transcription_'+shortId(transcribeJobId)+'.json','application/json'); }
+function downloadTxt()  { if(transcribeResult) dlBlob(transcribeResult.text||'','transcription_'+shortId(transcribeJobId)+'.txt','text/plain'); }
+function downloadSrt()  { if(transcribeResult) dlBlob(toSrt(transcribeResult.segments||[]),'transcription_'+shortId(transcribeJobId)+'.srt','text/plain'); }
+function downloadVtt()  { if(transcribeResult) dlBlob(toVtt(transcribeResult.segments||[]),'transcription_'+shortId(transcribeJobId)+'.vtt','text/plain'); }
+
+/* ----------------------------------------------------------------
+   History page
+---------------------------------------------------------------- */
+async function loadHistory() {
+  const el     = document.getElementById('hist-list');
+  const status = document.getElementById('hist-status').value;
+  const limit  = document.getElementById('hist-limit').value;
+  el.innerHTML = '<div class="loader"><span class="spin"></span>Loading...</div>';
+  hide('hist-result');
+
+  try {
+    let path = '/jobs/?limit=' + limit;
+    if (status) path += '&status=' + status;
+    const jobs = await apiGet(path);
+
+    if (!jobs || !jobs.length) {
+      el.innerHTML = '<div class="loader">No transcriptions found.</div>';
+      return;
+    }
+
+    el.innerHTML = jobs.map(job => {
+      const prog    = Number(job.progress) || 0;
+      const created = job.created_at ? fmtDate(job.created_at) : '-';
+      let   action  = '';
+      if (job.status === 'completed')
+        action = `<button class="btn btn-sm btn-sec" onclick="viewHistResult('${esc(job.job_id)}')">View</button>`;
+      else if (['queued','processing'].includes(job.status))
+        action = `<button class="btn btn-sm btn-danger" onclick="cancelHistJob('${esc(job.job_id)}')">Cancel</button>`;
+
+      return `
+        <div class="job-row">
+          <div class="job-id">${esc(job.job_id.slice(0,16))}...</div>
+          <div><span class="badge badge-${esc(job.status)}">${esc(job.status)}</span></div>
+          <div style="font-size:.82rem">${prog}%</div>
+          <div style="font-size:.78rem;color:var(--muted)">${created}</div>
+          <div>${action}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="alert alert-err">Failed to load history: ' + esc(err.message) + '</div>';
+  }
+}
+
+async function viewHistResult(jobId) {
+  const el = document.getElementById('hist-result');
+  el.innerHTML = '<div class="loader"><span class="spin"></span>Loading...</div>';
+  show('hist-result');
+  el.scrollIntoView({ behavior: 'smooth' });
+
+  try {
+    const result = await apiGet('/jobs/' + jobId + '/result');
+    histResult = result;
+    histJobId  = jobId;
+    el.innerHTML = `<div class="sec-title" style="margin-top:0">Result for job ${esc(jobId.slice(0,8))}...</div>` +
+      buildResultHtml(jobId, result, 'histDl');
+  } catch (err) {
+    el.innerHTML = '<div class="alert alert-err">' + esc(err.message) + '</div>';
+  }
+}
+
+async function cancelHistJob(jobId) {
+  try {
+    await apiDelete('/jobs/' + jobId);
+    loadHistory();
+  } catch (err) {
+    alert('Failed to cancel: ' + err.message);
+  }
+}
+
+/* ----------------------------------------------------------------
+   Download helpers — History page
+---------------------------------------------------------------- */
+function histDlJson() { if(histResult) dlBlob(JSON.stringify(histResult,null,2),'transcription_'+shortId(histJobId)+'.json','application/json'); }
+function histDlTxt()  { if(histResult) dlBlob(histResult.text||'','transcription_'+shortId(histJobId)+'.txt','text/plain'); }
+function histDlSrt()  { if(histResult) dlBlob(toSrt(histResult.segments||[]),'transcription_'+shortId(histJobId)+'.srt','text/plain'); }
+function histDlVtt()  { if(histResult) dlBlob(toVtt(histResult.segments||[]),'transcription_'+shortId(histJobId)+'.vtt','text/plain'); }
+
+/* ----------------------------------------------------------------
+   Dashboard page
+---------------------------------------------------------------- */
+async function loadDashboard() {
+  const el = document.getElementById('dash-content');
+  el.innerHTML = '<div class="loader"><span class="spin"></span>Loading...</div>';
+
+  try {
+    const h   = await apiGet('/health');
+    const sti = { healthy:'Online', degraded:'Degraded', unhealthy:'Offline' };
+    const col = { healthy:'#38ef7d', degraded:'#f6d365', unhealthy:'#eb3349' };
+
+    const svcsHtml = (h.services||[]).map(s => `
+      <div class="svc-card">
+        <div style="font-size:1.6rem;margin-bottom:.35rem">${s.status==='healthy' ? '&#10003;' : '&#10007;'}</div>
+        <div style="font-weight:600;font-size:.88rem;margin-bottom:.2rem">${esc(s.name)}</div>
+        <div style="font-size:.76rem;color:var(--muted)">${s.latency_ms ? s.latency_ms.toFixed(0)+'ms' : '-'}</div>
+      </div>
+    `).join('');
+
+    let modelsHtml = '';
+    try {
+      const md = await apiGet('/jobs/models');
+      const ms = (md && md.models) || [];
+      modelsHtml = `
+        <div class="sec-title" style="margin-top:2rem">Available Models</div>
+        <div class="model-grid">
+          ${ms.map(m => `
+            <div class="dash-model-card">
+              <div class="dash-model-name">${esc(m.name)}</div>
+              <div class="dash-model-size">${esc(m.size)}</div>
+              <div class="dash-model-d">VRAM: ${m.vram_required_gb} GB</div>
+              <div class="dash-model-d">${esc(m.recommended_for)}</div>
+              <div style="margin-top:.55rem">
+                ${m.downloaded
+                  ? '<span class="model-tag tag-ready">Downloaded</span>'
+                  : '<span class="model-tag tag-download">Not downloaded</span>'}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } catch { /* models endpoint optional */ }
+
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.85rem">
+        <div class="metric-card">
+          <div class="metric-val" style="color:${col[h.status]||'var(--muted)'};-webkit-text-fill-color:${col[h.status]||'var(--muted)'}">${sti[h.status]||'Unknown'}</div>
+          <div class="metric-lbl">System Status</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val">${esc(h.version||'N/A')}</div>
+          <div class="metric-lbl">API Version</div>
+        </div>
+      </div>
+      <div class="sec-title" style="margin-top:2rem">Services</div>
+      <div class="svc-grid">${svcsHtml||'<p style="color:var(--muted)">No services data</p>'}</div>
+      ${modelsHtml}
+    `;
+  } catch (err) {
+    el.innerHTML = '<div class="alert alert-err">Cannot connect to API: ' + esc(err.message) + '</div>';
+  }
+}
+
+/* ----------------------------------------------------------------
+   Settings page
+---------------------------------------------------------------- */
+function loadSettings() {
+  document.getElementById('s-url').value = window.location.origin + '/api';
+  document.getElementById('s-key').value = API_KEY;
+}
+
+/* ----------------------------------------------------------------
+   Subtitle generators
+---------------------------------------------------------------- */
+function toSrt(segs) {
+  return segs.map((s,i) =>
+    (i+1)+'\n'+srtT(s.start||0)+' --> '+srtT(s.end||0)+'\n'+
+    (s.speaker ? '['+s.speaker+'] ' : '')+(s.text||'')
+  ).join('\n\n');
+}
+function toVtt(segs) {
+  const lines = ['WEBVTT\n'];
+  segs.forEach((s,i) => lines.push(
+    (i+1)+'\n'+vttT(s.start||0)+' --> '+vttT(s.end||0)+'\n'+
+    (s.speaker ? '<v '+s.speaker+'>' : '')+(s.text||'')
+  ));
+  return lines.join('\n\n');
+}
+function srtT(s) {
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=Math.floor(s%60), ms=Math.round((s%1)*1000);
+  return pad(h)+':'+pad(m)+':'+pad(ss)+','+pad3(ms);
+}
+function vttT(s) { return srtT(s).replace(',','.'); }
+
+/* ----------------------------------------------------------------
+   Format helpers
+---------------------------------------------------------------- */
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1048576).toFixed(2) + ' MB';
+}
+function fmtDur(s) {
+  if (!s) return '0s';
+  if (s < 60) return s.toFixed(1) + 's';
+  const m = Math.floor(s/60), sec = Math.floor(s%60);
+  if (m >= 60) return Math.floor(m/60) + 'h ' + (m%60) + 'm';
+  return m + 'm ' + sec + 's';
+}
+function fmtTs(s) {
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=Math.floor(s%60);
+  return (h ? pad(h)+':' : '') + pad(m) + ':' + pad(sec);
+}
+function fmtDate(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  } catch { return '-'; }
+}
+function pad(n)  { return String(n).padStart(2,'0'); }
+function pad3(n) { return String(n).padStart(3,'0'); }
+function shortId(id) { return id ? id.slice(0,8) : 'result'; }
+
+/* ----------------------------------------------------------------
+   DOM helpers
+---------------------------------------------------------------- */
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+function sel(id)  { return document.getElementById(id).value; }
+function chk(id)  { return document.getElementById(id).checked; }
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function metricCard(lbl, val) {
+  return `<div class="metric-card">
+    <div class="metric-val">${esc(String(val))}</div>
+    <div class="metric-lbl">${esc(lbl)}</div>
+  </div>`;
+}
+function toggleDiar(chk) {
+  document.getElementById('spk-opts').style.display = chk.checked ? 'grid' : 'none';
+}
+function dlBlob(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ----------------------------------------------------------------
+   Balloons
+---------------------------------------------------------------- */
+function launchBalloons() {
+  const chars = ['*','o','x','+','@','#','!','~'];
+  for (let i = 0; i < 18; i++) {
+    setTimeout(() => {
+      const b = document.createElement('div');
+      b.className = 'balloon';
+      b.style.cssText = [
+        'position:fixed',
+        'font-size:' + (1.2 + Math.random()) + 'rem',
+        'font-weight:700',
+        'color:hsl(' + Math.floor(Math.random()*360) + ',70%,70%)',
+        'pointer-events:none',
+        'z-index:9999',
+        'left:' + Math.random() * 96 + 'vw',
+        'bottom:0',
+        'animation:floatup ' + (2 + Math.random() * 2) + 's ease-in forwards',
+      ].join(';');
+      b.textContent = chars[Math.floor(Math.random()*chars.length)];
+      document.body.appendChild(b);
+      setTimeout(() => b.remove(), 4500);
+    }, i * 100);
+  }
+}
+
+/* ----------------------------------------------------------------
+   Init
+---------------------------------------------------------------- */
+checkHealth();
+loadModelPicker();
+setInterval(checkHealth, 30000);
+</script>
+</body>
+</html>
