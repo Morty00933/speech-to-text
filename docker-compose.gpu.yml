@@ -1,0 +1,26 @@
+# Docker Compose GPU Override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+# Или просто: make gpu
+
+version: '3.8'
+
+services:
+  worker:
+    # Используем GPU образ вместо CPU
+    build:
+      context: ./services
+      dockerfile: worker/Dockerfile.gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 12G
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - DEFAULT_MODEL_SIZE=medium
+      # GPU ускоряет транскрипцию в 5-10 раз
+      - COMPUTE_TYPE=float16
