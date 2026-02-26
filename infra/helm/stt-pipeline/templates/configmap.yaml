@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    app.kubernetes.io/name: stt-pipeline
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  DATABASE_URL: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@{{ if .Values.infra.external }}{{ .Values.infra.postgresHost }}{{ else }}{{ .Release.Name }}-postgres{{ end }}:{{ .Values.postgres.service.port }}/$(POSTGRES_DB)"
+  REDIS_URL: "redis://{{ if .Values.infra.external }}{{ .Values.infra.redisHost }}{{ else }}{{ .Release.Name }}-redis{{ end }}:{{ .Values.redis.service.port }}/0"
+  MINIO_ENDPOINT: "{{ if .Values.infra.external }}{{ .Values.infra.minioHost }}{{ else }}{{ .Release.Name }}-minio{{ end }}:{{ .Values.minio.service.apiPort }}"
+  MINIO_BUCKET: {{ .Values.minio.bucket | quote }}
+  RATE_LIMIT: {{ .Values.api.env.rateLimit | quote }}
+  LOG_LEVEL: {{ .Values.api.env.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.api.env.logFormat | quote }}
+  DEFAULT_MODEL_SIZE: {{ .Values.worker.env.defaultModelSize | quote }}
+  CUDA_VISIBLE_DEVICES: {{ .Values.worker.env.cudaVisibleDevices | quote }}
+  MODEL_CACHE_DIR: {{ .Values.worker.modelVolume.mountPath | quote }}
+  API_URL: "http://{{ .Release.Name }}-api:{{ .Values.api.service.port }}"

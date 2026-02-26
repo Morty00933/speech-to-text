@@ -1,0 +1,22 @@
+# Hybrid mode: infra on host Docker, apps in Minikube
+postgres:
+  enabled: false
+redis:
+  enabled: false
+minio:
+  enabled: false
+
+infra:
+  external: true
+  postgresHost: host.minikube.internal
+  redisHost: host.minikube.internal
+  minioHost: host.minikube.internal
+
+secrets:
+  postgres:
+    user: stt
+    password: stt
+    db: stt
+  minio:
+    accessKey: minioadmin
+    secretKey: minioadmin
