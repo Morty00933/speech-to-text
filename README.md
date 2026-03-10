@@ -549,10 +549,3 @@ make db-shell                                # Консоль PostgreSQL
 ## Лицензия
 
 MIT License
-
-## Благодарности
-
-- [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) — оптимизированный Whisper на CTranslate2
-- [pyannote.audio](https://github.com/pyannote/pyannote-audio) — диаризация спикеров
-- [Silero VAD](https://github.com/snakers4/silero-vad) — детектор голосовой активности
-- [FastAPI](https://fastapi.tiangolo.com/) — современный Python веб-фреймворк
